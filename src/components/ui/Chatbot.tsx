@@ -2,14 +2,10 @@
 import React, { useState } from "react";
 import Input from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface ChatbotProps {
   topic: string;
 }
-
-const API_KEY = "ENTER_YOUR_API_KEY_HERE"; // Replace with actual API key
-const genAI = new GoogleGenerativeAI(API_KEY);
 
 const Chatbot: React.FC<ChatbotProps> = ({ topic }) => {
   const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
@@ -17,19 +13,23 @@ const Chatbot: React.FC<ChatbotProps> = ({ topic }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || loading) return;
 
-    const userMessage = { sender: "You", text: input };
+    const userQuestion = input.trim();
+    const userMessage = { sender: "You", text: userQuestion };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
     try {
-      const botResponse = await getBotResponse(input, topic);
+      const botResponse = await getBotResponse(userQuestion, topic);
       setMessages((prev) => [...prev, { sender: "AI Tutor", text: botResponse }]);
     } catch (error) {
       console.error("Error fetching response:", error);
-      setMessages((prev) => [...prev, { sender: "AI Tutor", text: "Sorry, I couldn't process your request." }]);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "AI Tutor", text: "Sorry, I couldn't process your request." },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -37,16 +37,22 @@ const Chatbot: React.FC<ChatbotProps> = ({ topic }) => {
 
   const getBotResponse = async (question: string, topic: string): Promise<string> => {
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-      const prompt = `Briefly answer the following question related to ${topic}. Format the response properly: "${question}"`;
-      const result = await model.generateContent({ contents: [{ parts: [{ text: prompt }] }] });
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question, topic }),
+      });
 
-      if (!result.response) return "I'm here to help! Can you rephrase your question?";
-
-      const response = await result.response.text();
-      return response.replace(/\n/g, "<br />"); // Preserve newlines
+      const data = await response.json();
+      return (
+        data.reply ||
+        data.error ||
+        "I'm here to help! Can you rephrase your question?"
+      );
     } catch (error) {
-      console.error("Error with Gemini API:", error);
+      console.error("Error with chat API:", error);
       return "Sorry, there was an issue getting an answer.";
     }
   };
@@ -59,7 +65,12 @@ const Chatbot: React.FC<ChatbotProps> = ({ topic }) => {
           <p className="text-gray-400 text-center">Ask me anything about {topic}!</p>
         ) : (
           messages.map((msg, index) => (
-            <div key={index} className={`p-2 my-1 ${msg.sender === "You" ? "text-blue-400" : "text-green-400"}`}>
+            <div
+              key={index}
+              className={`p-2 my-1 ${
+                msg.sender === "You" ? "text-blue-400" : "text-green-400"
+              }`}
+            >
               <strong>{msg.sender}:</strong>{" "}
               <span dangerouslySetInnerHTML={{ __html: formatMessage(msg.text) }} />
             </div>
@@ -72,7 +83,13 @@ const Chatbot: React.FC<ChatbotProps> = ({ topic }) => {
           type="text"
           placeholder="Ask a question..."
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
+          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
           className="flex-1 bg-gray-700 text-white px-3 py-2 rounded-md"
         />
         <Button onClick={handleSend} className="ml-2" disabled={loading}>
@@ -86,7 +103,10 @@ const Chatbot: React.FC<ChatbotProps> = ({ topic }) => {
 // Function to format AI responses (code blocks, newlines)
 const formatMessage = (text: string) => {
   return text
-    .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-900 p-2 rounded-md"><code>$1</code></pre>') // Code blocks
+    .replace(
+      /```([\s\S]*?)```/g,
+      '<pre class="bg-gray-900 p-2 rounded-md"><code>$1</code></pre>'
+    ) // Code blocks
     .replace(/\n/g, "<br />"); // Preserve newlines
 };
 

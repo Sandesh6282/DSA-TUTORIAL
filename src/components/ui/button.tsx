@@ -1,9 +1,9 @@
 import * as React from "react";
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {}
+export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, ...props }, ref) => {
+  ({ className = "", ...props }, ref) => {
     return <button ref={ref} className={`px-4 py-2 bg-blue-500 text-white rounded ${className}`} {...props} />;
   }
 );
